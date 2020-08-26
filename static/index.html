@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <canvas id="canvas" style="display: none;"></canvas>
+
+    <video id='video'  width="900" height="900" style="width: 900px;height: 900px;display: none;"></video>
+</body>
+
+<script>
+  
+const video = document.getElementById('video')
+const canvas =document.getElementById('canvas')
+canvas.width = 480;
+canvas.height = 360;
+
+function render() {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, video.width,video.height);
+}
+    function   callCamera(videoDom) {
+      if (!navigator.mediaDevices) {
+        return Promise.reject("浏览器不支持navigator.mediaDevices");
+      }
+      return navigator.mediaDevices.enumerateDevices().then(arr => {
+        let sources = arr
+          .filter(a => {
+            return a.kind.indexOf("video") > -1;
+          })
+          .map(a => {
+            return a.deviceId;
+          });
+
+        return navigator.mediaDevices
+          .getUserMedia({
+            video: {
+              deviceId: sources[1] || sources[0]
+            }
+          })
+          .then(stream => {
+           if ("srcObject" in videoDom) {
+                videoDom.srcObject = stream;
+               
+            } else {
+                //避免在新的浏览器中使用它，因为它正在被弃用。
+                videoDom.src = window.URL.createObjectURL(stream);
+               
+            }
+            videoDom.onloadedmetadata = function (e) {
+                videoDom.play();
+            };
+          });
+      });
+    }
+
+    callCamera(document.getElementById('video')).catch(function (err) {
+          
+    });
+
+    window.setInterval(function(){
+      canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0,  video.videoHeight,video.videoHeight);
+    },15);
+
+    const ws = new WebSocket('ws://localhost:16547');
+
+    ws.addEventListener('open', (e) => {
+
+    const mediaStream = new MediaStream();
+
+    // 添加视频轨
+    const video = document.getElementById('canvas').captureStream(3);
+    video.getTracks().forEach(mediaStream.addTrack.bind(mediaStream));
+
+    // 添加音频轨（From <audio> element）
+    // const audioContext = new AudioContext();
+    // const audioSrc = audioContext.createMediaElementSource(document.querySelector('audio'));
+    // const destination = audioContext.createMediaStreamDestination();
+    // audioSrc.connect(destination);
+    // destination.stream.getTracks().forEach(mediaStream.addTrack.bind(mediaStream));
+
+    // 创建 MediaRecorder
+    const mediaRecorder = new MediaRecorder(mediaStream, {
+        mimeType: 'video/webm;codecs=h264',
+      //  audioBitsPerSecond: 44100,  // 44.1kHz
+        videoBitsPerSecond: 3000000 // 3000k 画质
+    });
+
+    mediaRecorder.addEventListener('dataavailable', (e) => {
+        // 将数据发送到后台
+        // 发送时 e.data 的类型是 Blob
+        ws.send(e.data);
+    });
+
+    // 开始录制并每隔 1s 发送一次数据
+    mediaRecorder.start(1000);
+
+    });
+</script>
+</html>
